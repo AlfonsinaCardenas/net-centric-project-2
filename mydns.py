@@ -121,7 +121,7 @@ def parse_rr(index, response):
 
 # response is the raw binary response received from server
 def parse_response(response):
-    print('----- parse response -----')
+    # print('----- parse response -----')
 
     # dns message format [RFC 4.1. Format]
     # This example will only parse header and question sections.
@@ -141,7 +141,7 @@ def parse_response(response):
     # current byte index
     index = 0
 
-    print('Header section [RFC 4.1.1. Header section format]')
+    # print('Header section [RFC 4.1.1. Header section format]')
     # Header section [RFC 4.1.1. Header section format]
     #                                 1  1  1  1  1  1
     #   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
@@ -160,25 +160,25 @@ def parse_response(response):
     # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 
     num, index = parse_unsigned_int(index, 2, response)
-    print(f'ID: {num}')
+    # print(f'ID: {num}')
 
     # skip the next 2 bytes, i.e., second row
     index += 2
 
     num, index = parse_unsigned_int(index, 2, response)
-    print(f'QDCOUNT: {num}')
+    # print(f'QDCOUNT: {num}')
 
     num, index = parse_unsigned_int(index, 2, response)
-    print(f'ANCOUNT: {num}')
+    # print(f'ANCOUNT: {num}')
 
     num, index = parse_unsigned_int(index, 2, response)
-    print(f'NSCOUNT: {num}')
+    # print(f'NSCOUNT: {num}')
 
     num, index = parse_unsigned_int(index, 2, response)
-    print(f'ARCOUNT: {num}')
+    # print(f'ARCOUNT: {num}')
 
 
-    print('Question section [RFC 4.1.2. Question section format]')
+    # print('Question section [RFC 4.1.2. Question section format]')
     # Question section [RFC 4.1.2. Question section format]
     #                                 1  1  1  1  1  1
     #   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
@@ -193,13 +193,13 @@ def parse_response(response):
     # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
 
     name, index = parse_name(index, response)
-    print(f'QNAME: {name}')
+    # print(f'QNAME: {name}')
 
     num, index = parse_unsigned_int(index, 2, response)
-    print(f'QTYPE: {num}')
+    # print(f'QTYPE: {num}')
 
     num, index = parse_unsigned_int(index, 2, response)
-    print(f'QCLASS: {num}')
+    # print(f'QCLASS: {num}')
 
     # added: counts from the header (bytes 6-11)
     ancount = int.from_bytes(response[6:8], 'big')
