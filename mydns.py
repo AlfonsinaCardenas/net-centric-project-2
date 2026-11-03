@@ -220,21 +220,21 @@ def parse_response(response):
 
     # added: display like the sample output
     print('Reply received. Content overview:')
-    print(f'{len(answers)} Answers.')
-    print(f'{len(authority)} Intermediate Name Servers.')
-    print(f'{len(additional)} Additional Information Records.')
+    print(f'\t{len(answers)} Answers.')
+    print(f'\t{len(authority)} Intermediate Name Servers.')
+    print(f'\t{len(additional)} Additional Information Records.')
     print('Answers section: ')
     for r in answers:
         if r['type'] == TYPE_A:
-            print(f"Name : {r['name']} IP: {r['data']}")
+            print(f"\tName : {r['name']}\tIP: {r['data']}")
     print('Authority Section:')
     for r in authority:
         if r['type'] == TYPE_NS:
-            print(f"Name : {r['name']} Name Server: {r['data']}")
+            print(f"\tName : {r['name']}\tName Server: {r['data']}")
     print('Additional Information Section:')
     for r in additional:
         if r['type'] == TYPE_A:  # IPv4 only, IPv6 ignored
-            print(f"Name : {r['name']} IP : {r['data']}")
+            print(f"\tName : {r['name']}\tIP : {r['data']}")
 
     return answers, authority, additional
 
