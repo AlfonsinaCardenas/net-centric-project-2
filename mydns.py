@@ -1,28 +1,13 @@
 import sys
 from socket import socket, AF_INET, SOCK_DGRAM
 
-# added: resource record types [RFC 3.2.2. TYPE values]
-TYPE_A = 1
-TYPE_NS = 2
+# resource record types [RFC 3.2.2. TYPE values]
+TYPE_A = 1 # host address
+TYPE_NS = 2 # authoritative name server
 
 # create DNS query message
 def create_query(id, domain_name):
-    # Query header [RFC 4.1.1. Header section format]
-    #                                 1  1  1  1  1  1
-    #   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                      ID                       |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |QR|   Opcode  |AA|TC|RD|RA|   Z    |   RCODE   |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                    QDCOUNT                    |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                    ANCOUNT                    |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                    NSCOUNT                    |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                    ARCOUNT                    |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+   # Header section [RFC 4.1.1. Header section format]
     first_row = (id).to_bytes(2, byteorder='big')
     second_row = (0).to_bytes(2, byteorder='big')
     qdcount = (1).to_bytes(2, byteorder='big')
@@ -32,18 +17,6 @@ def create_query(id, domain_name):
     header = first_row + second_row + qdcount + ancount + nscount + arcount
 
     # Question section [RFC 4.1.2. Question section format]
-    #                                 1  1  1  1  1  1
-    #   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                                               |
-    # /                     QNAME                     /
-    # /                                               /
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                     QTYPE                     |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                     QCLASS                    |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-
     # initialize qname as empty bytes
     qname = b''
 
@@ -121,86 +94,35 @@ def parse_rr(index, response):
 
 # response is the raw binary response received from server
 def parse_response(response):
-    # print('----- parse response -----')
-
-    # dns message format [RFC 4.1. Format]
-    # This example will only parse header and question sections.
-    #
-    # +---------------------+
-    # |        Header       |
-    # +---------------------+
-    # |       Question      | the question for the name server
-    # +---------------------+
-    # |        Answer       | RRs answering the question
-    # +---------------------+
-    # |      Authority      | RRs pointing toward an authority
-    # +---------------------+
-    # |      Additional     | RRs holding additional information
-    # +---------------------+
-
-    # current byte index
+    # added: index to keep track of the current position in the response
     index = 0
-
-    # print('Header section [RFC 4.1.1. Header section format]')
     # Header section [RFC 4.1.1. Header section format]
-    #                                 1  1  1  1  1  1
-    #   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                      ID                       |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |QR|   Opcode  |AA|TC|RD|RA|   Z    |   RCODE   |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                    QDCOUNT                    |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                    ANCOUNT                    |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                    NSCOUNT                    |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                    ARCOUNT                    |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-
     num, index = parse_unsigned_int(index, 2, response)
-    # print(f'ID: {num}')
 
     # skip the next 2 bytes, i.e., second row
     index += 2
 
+    # parse the counts from the header
     num, index = parse_unsigned_int(index, 2, response)
+
     # print(f'QDCOUNT: {num}')
-
     num, index = parse_unsigned_int(index, 2, response)
+
     # print(f'ANCOUNT: {num}')
-
     num, index = parse_unsigned_int(index, 2, response)
+
     # print(f'NSCOUNT: {num}')
-
     num, index = parse_unsigned_int(index, 2, response)
+
     # print(f'ARCOUNT: {num}')
-
-
-    # print('Question section [RFC 4.1.2. Question section format]')
-    # Question section [RFC 4.1.2. Question section format]
-    #                                 1  1  1  1  1  1
-    #   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                                               |
-    # /                     QNAME                     /
-    # /                                               /
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                     QTYPE                     |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-    # |                     QCLASS                    |
-    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
-
     name, index = parse_name(index, response)
+
     # print(f'QNAME: {name}')
-
     num, index = parse_unsigned_int(index, 2, response)
+
     # print(f'QTYPE: {num}')
-
     num, index = parse_unsigned_int(index, 2, response)
-    # print(f'QCLASS: {num}')
-
+    
     # added: counts from the header (bytes 6-11)
     ancount = int.from_bytes(response[6:8], 'big')
     nscount = int.from_bytes(response[8:10], 'big')
