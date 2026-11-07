@@ -1,13 +1,28 @@
 import sys
 from socket import socket, AF_INET, SOCK_DGRAM
 
-# resource record types [RFC 3.2.2. TYPE values]
-TYPE_A = 1 # host address
-TYPE_NS = 2 # authoritative name server
+#resource record types [RFC 3.2.2. TYPE values]
+TYPE_A = 1 #host address
+TYPE_NS = 2 #authoritative name server
 
 # create DNS query message
 def create_query(id, domain_name):
-   # Header section [RFC 4.1.1. Header section format]
+    # Query header [RFC 4.1.1. Header section format]
+    #                                 1  1  1  1  1  1
+    #   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                      ID                       |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |QR|   Opcode  |AA|TC|RD|RA|   Z    |   RCODE   |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                    QDCOUNT                    |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                    ANCOUNT                    |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                    NSCOUNT                    |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                    ARCOUNT                    |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
     first_row = (id).to_bytes(2, byteorder='big')
     second_row = (0).to_bytes(2, byteorder='big')
     qdcount = (1).to_bytes(2, byteorder='big')
@@ -17,6 +32,18 @@ def create_query(id, domain_name):
     header = first_row + second_row + qdcount + ancount + nscount + arcount
 
     # Question section [RFC 4.1.2. Question section format]
+    #                                 1  1  1  1  1  1
+    #   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                                               |
+    # /                     QNAME                     /
+    # /                                               /
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                     QTYPE                     |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                     QCLASS                    |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+
     # initialize qname as empty bytes
     qname = b''
 
@@ -50,18 +77,18 @@ def parse_name(index, response):
         label_length = response[index]
 
         if label_length == 0:
-            end = index + 1 
+            end = index + 1
             loop = False
         #pointer
         elif label_length >= int('11000000', 2):
             offset = int.from_bytes(response[index:index + 2], byteorder='big') - int('1100000000000000', 2)
-            end = index + 2 
+            end = index + 2
             prev_name, _ = parse_name(offset, response)
             name += prev_name
             break
         # label
         else:
-            index += 1 
+            index += 1
             label = response[index:index + label_length].decode('utf-8')
             name += label
             name += '.'
@@ -72,11 +99,17 @@ def parse_name(index, response):
 
     return name, end
 
-# added: parse 4 bytes as an IPv4 address
+#parse 4 bytes from index as an IPv4 address string
 def parse_ip(index, response):
-    return '.'.join(str(b) for b in response[index:index + 4])
+    ip = ''
+    for i in range(4):
+        ip += str(response[index + i])
+        if i < 3:
+            ip += '.'
+    return ip
 
-# added: parse one resource record [RFC 4.1.3], return record and index of next byte
+#parse resource record from index, return record and index of next byte
+#Resource record format [RFC 4.1.3. Resource record format]
 def parse_rr(index, response):
     name, index = parse_name(index, response)
     rtype, index = parse_unsigned_int(index, 2, response)
@@ -84,63 +117,120 @@ def parse_rr(index, response):
     ttl, index = parse_unsigned_int(index, 4, response)
     rdlength, index = parse_unsigned_int(index, 2, response)
 
+    #RDATA depends on the type, only A and NS are needed
     data = None
-    if rtype == TYPE_A and rdlength == 4:   # RDATA is an IP
+    if rtype == TYPE_A and rdlength == 4:
         data = parse_ip(index, response)
-    elif rtype == TYPE_NS:                  # RDATA is a name
+    elif rtype == TYPE_NS:
         data, _ = parse_name(index, response)
 
-    return {'name': name, 'type': rtype, 'data': data}, index + rdlength
+    record = {'name': name, 'type': rtype, 'data': data}
+
+    #skip over RDATA to the next record
+    return record, index + rdlength
 
 # response is the raw binary response received from server
 def parse_response(response):
-    # added: index to keep track of the current position in the response
+    # print('----- parse response -----')
+
+    # dns message format [RFC 4.1. Format]
+    # This example will only parse header and question sections.
+    #
+    # +---------------------+
+    # |        Header       |
+    # +---------------------+
+    # |       Question      | the question for the name server
+    # +---------------------+
+    # |        Answer       | RRs answering the question
+    # +---------------------+
+    # |      Authority      | RRs pointing toward an authority
+    # +---------------------+
+    # |      Additional     | RRs holding additional information
+    # +---------------------+
+
+    # current byte index
     index = 0
+
+    # print('Header section [RFC 4.1.1. Header section format]')
     # Header section [RFC 4.1.1. Header section format]
+    #                                 1  1  1  1  1  1
+    #   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                      ID                       |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |QR|   Opcode  |AA|TC|RD|RA|   Z    |   RCODE   |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                    QDCOUNT                    |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                    ANCOUNT                    |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                    NSCOUNT                    |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                    ARCOUNT                    |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+
     num, index = parse_unsigned_int(index, 2, response)
+    # print(f'ID: {num}')
 
     # skip the next 2 bytes, i.e., second row
     index += 2
 
-    # parse the counts from the header
     num, index = parse_unsigned_int(index, 2, response)
-
     # print(f'QDCOUNT: {num}')
-    num, index = parse_unsigned_int(index, 2, response)
 
+    num, index = parse_unsigned_int(index, 2, response)
     # print(f'ANCOUNT: {num}')
-    num, index = parse_unsigned_int(index, 2, response)
+    ancount = num
 
+    num, index = parse_unsigned_int(index, 2, response)
     # print(f'NSCOUNT: {num}')
-    num, index = parse_unsigned_int(index, 2, response)
+    nscount = num
 
+    num, index = parse_unsigned_int(index, 2, response)
     # print(f'ARCOUNT: {num}')
+    arcount = num
+
+
+    # print('Question section [RFC 4.1.2. Question section format]')
+    # Question section [RFC 4.1.2. Question section format]
+    #                                 1  1  1  1  1  1
+    #   0  1  2  3  4  5  6  7  8  9  0  1  2  3  4  5
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                                               |
+    # /                     QNAME                     /
+    # /                                               /
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                     QTYPE                     |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+    # |                     QCLASS                    |
+    # +--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+--+
+
     name, index = parse_name(index, response)
-
     # print(f'QNAME: {name}')
-    num, index = parse_unsigned_int(index, 2, response)
 
+    num, index = parse_unsigned_int(index, 2, response)
     # print(f'QTYPE: {num}')
+
     num, index = parse_unsigned_int(index, 2, response)
-    
-    # added: counts from the header (bytes 6-11)
-    ancount = int.from_bytes(response[6:8], 'big')
-    nscount = int.from_bytes(response[8:10], 'big')
-    arcount = int.from_bytes(response[10:12], 'big')
+    # print(f'QCLASS: {num}')
 
-    # added: resource record sections [RFC 4.1.3]
-    answers, authority, additional = [], [], []
-    for _ in range(ancount):
-        r, index = parse_rr(index, response)
-        answers.append(r)
-    for _ in range(nscount):
-        r, index = parse_rr(index, response)
-        authority.append(r)
-    for _ in range(arcount):
-        r, index = parse_rr(index, response)
-        additional.append(r)
+    #Answer, Authority and Additional sections [RFC 4.1.3. Resource record format]
+    answers = []
+    for i in range(ancount):
+        record, index = parse_rr(index, response)
+        answers.append(record)
 
-    # added: display like the sample output
+    authority = []
+    for i in range(nscount):
+        record, index = parse_rr(index, response)
+        authority.append(record)
+
+    additional = []
+    for i in range(arcount):
+        record, index = parse_rr(index, response)
+        additional.append(record)
+
+    #display reply content
     print('Reply received. Content overview:')
     print(f'\t{len(answers)} Answers.')
     print(f'\t{len(authority)} Intermediate Name Servers.')
@@ -155,7 +245,8 @@ def parse_response(response):
             print(f"\tName : {r['name']}\tName Server: {r['data']}")
     print('Additional Information Section:')
     for r in additional:
-        if r['type'] == TYPE_A:  # IPv4 only, IPv6 ignored
+        #only IPv4, IPv6 is ignored
+        if r['type'] == TYPE_A:
             print(f"\tName : {r['name']}\tIP : {r['data']}")
 
     return answers, authority, additional
@@ -172,31 +263,45 @@ socket = socket(AF_INET, SOCK_DGRAM)
 
 # send DNS query
 id = 1
-print('-' * 64)                                   # added
-print(f'DNS server to query: {root_dns_ip}')      # added
+print('-' * 64)
+print(f'DNS server to query: {root_dns_ip}')
 query = create_query(id, domain_name)
 socket.sendto(query, (root_dns_ip, 53))
 response, server_address = socket.recvfrom(2048)
 
 # parse DNS response
-answers, authority, additional = parse_response(response)   # changed: save the result
+answers, authority, additional = parse_response(response)
 
-# added: keep querying intermediate servers until we get an A record
-while not any(r['type'] == TYPE_A for r in answers):
-    # find an NS whose IP is in the Additional section
-    glue = {r['name'].lower(): r['data'] for r in additional if r['type'] == TYPE_A}
+#check if the answers section has an IP for the domain name
+def has_ip(answers):
+    for r in answers:
+        if r['type'] == TYPE_A:
+            return True
+    return False
+
+#keep querying intermediate DNS servers until we get an IP
+while not has_ip(answers):
+    #pick a name server from the authority section that has an IP in the additional section
     next_ip = None
-    for r in authority:
-        if r['type'] == TYPE_NS and r['data'].lower() in glue:
-            next_ip = glue[r['data'].lower()]
+    for ns in authority:
+        if ns['type'] != TYPE_NS:
+            continue
+        for r in additional:
+            if r['type'] == TYPE_A and r['name'].lower() == ns['data'].lower():
+                next_ip = r['data']
+                break
+        if next_ip is not None:
             break
 
     if next_ip is None:
-        print('No intermediate DNS server IP found. Stopping.')
+        print('No intermediate DNS server IP found.')
         break
 
+    #send DNS query to the intermediate server
     print('-' * 64)
     print(f'DNS server to query: {next_ip}')
     socket.sendto(query, (next_ip, 53))
     response, server_address = socket.recvfrom(2048)
+
+    #parse DNS response
     answers, authority, additional = parse_response(response)
